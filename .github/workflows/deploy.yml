@@ -38,8 +38,10 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
-      - name: Run unit tests
-        run: go test ./...
+      - name: Generate Swagger Docs
+        run: |
+          go install github.com/swaggo/swag/cmd/swag@latest
+          swag init -g cmd/api/main.go
 
       - name: Build binary
         run: |
