@@ -131,14 +131,14 @@ func Run() {
 		deleteContactRequestUC,
 	)
 
-    // Message HTTP handler (history pagination)
-    messageHandler := handlers.NewMessageHandler(messageService)
+	// Message HTTP handler (history pagination)
+	messageHandler := handlers.NewMessageHandler(messageService)
 
 	wsHub := ws.NewHub(contactsService, messageService, logger.Log)
 	websocketHandler := handlers.NewWebsocketHandler(wsHub)
 
 	// 8. Init Server
-	app := http.NewServer()
+	app := http.NewServer(cfg.CorsAllowedOrigins)
 
 	// Init JWT Manager
 	accessTTL := time.Duration(cfg.AccessTokenMinutes) * time.Minute

@@ -9,13 +9,13 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 )
 
-func NewServer() *fiber.App {
+func NewServer(corsAllowedOrigins string) *fiber.App {
 	app := fiber.New(fiber.Config{
 		AppName: "Chat Service",
 	})
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:8080",
+		AllowOrigins:     corsAllowedOrigins,
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
 		AllowCredentials: true,
