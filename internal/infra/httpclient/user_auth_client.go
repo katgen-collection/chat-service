@@ -38,7 +38,7 @@ func New(baseURL string, httpClient *http.Client) (*Client, error) {
 type User struct {
 	ID        string   `json:"id"`
 	Email     string   `json:"email"`
-	FullName  string   `json:"full_name,omitempty"`
+	FullName  string   `json:"fullname,omitempty"`
 	Username  string   `json:"username"`
 	Roles     []string `json:"roles"`
 	Status    string   `json:"status,omitempty"`

@@ -3,6 +3,7 @@ package contacts
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -110,26 +111,28 @@ func (s *service) CreateContactRequest(request *CreateContactRequest, bearerToke
 
 	// Fetch sender explicitly for resolving name (if available)
 	senderUser, err := s.repo.FetchUser(ctx, request.SenderID, bearerToken)
-	if err == nil && senderUser != nil {
-		senderName = senderUser.FullName
-		if senderName == "" {
-			senderName = senderUser.Username
-		}
-		if senderName == "" {
-			senderName = senderUser.Email
-		}
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch sender info: %w", err)
+	}
+	senderName = senderUser.FullName
+	if senderName == "" {
+		senderName = senderUser.Username
+	}
+	if senderName == "" {
+		senderName = senderUser.Email
 	}
 
 	// Fetch receiver explicitly for resolving name
 	receiverUser, err := s.repo.FetchUser(ctx, request.ReceiverID, bearerToken)
-	if err == nil && receiverUser != nil {
-		receiverName = receiverUser.FullName
-		if receiverName == "" {
-			receiverName = receiverUser.Username
-		}
-		if receiverName == "" {
-			receiverName = receiverUser.Email
-		}
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch receiver info: %w", err)
+	}
+	receiverName = receiverUser.FullName
+	if receiverName == "" {
+		receiverName = receiverUser.Username
+	}
+	if receiverName == "" {
+		receiverName = receiverUser.Email
 	}
 
 	newRequest := &ContactRequest{
