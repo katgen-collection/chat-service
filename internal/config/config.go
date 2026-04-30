@@ -24,6 +24,7 @@ type Config struct {
 	CorsAllowedOrigins string
 	AccessTokenMinutes int
 	RefreshTokenDays   int
+	RedisURL           string
 }
 
 func Load() *Config {
@@ -47,6 +48,7 @@ func Load() *Config {
 		CorsAllowedOrigins: getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3002,http://localhost:8080,https://chat.mikhailjbs.my.id"),
 		AccessTokenMinutes: getEnvAsInt("ACCESS_TOKEN_MINUTES", 15),
 		RefreshTokenDays:   getEnvAsInt("REFRESH_TOKEN_DAYS", 30),
+		RedisURL:           getEnv("REDIS_URL", "redis://localhost:6379"),
 	}
 }
 

@@ -18,10 +18,12 @@ const (
 	// Outbound events
 	EventGetOnlineUsers     = "getOnlineUsers"
 	EventMutualStatusUpdate = "mutualStatusUpdate"
-	EventMessageIncoming    = "message:incoming"
-	EventMessageAck         = "message:ack"
-	EventMessageRead        = "message:read"
-	EventError              = "error"
+	EventMessageIncoming        = "message:incoming"
+	EventMessageAck             = "message:ack"
+	EventMessageRead            = "message:read"
+	EventContactRequestIncoming = "contact_request:incoming"
+	EventContactRequestUpdated  = "contact_request:updated"
+	EventError                  = "error"
 
 	// Inbound events
 	EventSendMessage = "message:send"
@@ -234,6 +236,31 @@ func (h *Hub) notifyMutuals(userID string, status string) error {
 		}
 	}
 	return nil
+}
+
+// SendToUser sends an arbitrary event to a specific connected user.
+func (h *Hub) SendToUser(userID string, event string, data interface{}) error {
+	if c := h.getClient(userID); c != nil {
+		return c.send(event, data)
+	}
+	return nil
+}
+
+// NotifyNewContact cross-notifies two newly connected mutuals of their online status.
+func (h *Hub) NotifyNewContact(userA, userB string) {
+	cA := h.getClient(userA)
+	cB := h.getClient(userB)
+
+	if cA != nil && cB != nil {
+		_ = cA.send(EventMutualStatusUpdate, map[string]string{
+			"userId": userB,
+			"status": "online",
+		})
+		_ = cB.send(EventMutualStatusUpdate, map[string]string{
+			"userId": userA,
+			"status": "online",
+		})
+	}
 }
 
 // messageDTO is a trimmed message representation safe for websocket clients.

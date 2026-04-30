@@ -9,118 +9,65 @@ import (
 )
 
 const (
-	DefaultAccessTokenCookie = "access_token"
-	DefaultClaimsContextKey  = "auth.claims"
+	DefaultClaimsContextKey = "auth.claims"
 )
 
 type Config struct {
-	TokenManager      *security.TokenManager
-	AccessTokenCookie string
-	ContextKey        string
-	AllowQueryToken   bool
+	ContextKey string
 }
 
 type Policy struct {
-	Roles          []string
 	AllowAnonymous bool
+	Roles          []string
 }
 
 type AuthMiddleware struct {
-	tokenManager *security.TokenManager
-	accessCookie string
-	contextKey   string
-	allowQuery   bool
+	contextKey string
 }
 
 func NewAuthMiddleware(cfg Config) *AuthMiddleware {
-	if cfg.TokenManager == nil {
-		panic("middleware.NewAuthMiddleware: TokenManager is required")
-	}
-	if cfg.AccessTokenCookie == "" {
-		cfg.AccessTokenCookie = DefaultAccessTokenCookie
-	}
 	if cfg.ContextKey == "" {
 		cfg.ContextKey = DefaultClaimsContextKey
 	}
-
 	return &AuthMiddleware{
-		tokenManager: cfg.TokenManager,
-		accessCookie: cfg.AccessTokenCookie,
-		contextKey:   cfg.ContextKey,
-		allowQuery:   cfg.AllowQueryToken,
+		contextKey: cfg.ContextKey,
 	}
 }
 
 func (a *AuthMiddleware) Require(policy Policy) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		token := a.extractToken(c)
-		if token == "" {
-			if policy.AllowAnonymous {
-				return c.Next()
-			}
-			return unauthorized(c, "missing access token")
+		userID := c.Get("X-User-Id")
+		if userID == "" {
+			userID = c.Get("X-User-ID")
 		}
 
-		claims, err := a.tokenManager.ParseAccessToken(token)
-		if err != nil {
+		if userID == "" {
 			if policy.AllowAnonymous {
 				return c.Next()
 			}
-			return unauthorized(c, "invalid access token")
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+		}
+
+		rolesStr := c.Get("X-User-Roles")
+		roles := []string{}
+		if rolesStr != "" {
+			roles = strings.Split(rolesStr, ",")
+		}
+
+		claims := &security.ClaimsPayload{
+			UserID:   userID,
+			Email:    c.Get("X-User-Email"),
+			Username: c.Get("X-User-Username"),
+			Roles:    roles,
 		}
 
 		if len(policy.Roles) > 0 && !hasIntersection(claims.Roles, policy.Roles) {
-			return forbidden(c, "insufficient permissions")
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Forbidden"})
 		}
 
 		c.Locals(a.contextKey, claims)
 		return c.Next()
 	}
-}
-
-func ClaimsFromContext(c *fiber.Ctx) (*security.ClaimsPayload, bool) {
-	return ClaimsFromContextWithKey(c, DefaultClaimsContextKey)
-}
-
-func ClaimsFromContextWithKey(c *fiber.Ctx, key string) (*security.ClaimsPayload, bool) {
-	val := c.Locals(key)
-	if val == nil {
-		return nil, false
-	}
-	if claims, ok := val.(*security.ClaimsPayload); ok {
-		return claims, true
-	}
-	if claims, ok := val.(security.ClaimsPayload); ok {
-		return &claims, true
-	}
-	return nil, false
-}
-
-func (a *AuthMiddleware) extractToken(c *fiber.Ctx) string {
-	if token := extractBearerToken(c.Get("Authorization")); token != "" {
-		return token
-	}
-	if token := c.Cookies(a.accessCookie); token != "" {
-		return token
-	}
-	if a.allowQuery {
-		if token := c.Query("token"); token != "" {
-			return token
-		}
-	}
-	return ""
-}
-
-func extractBearerToken(header string) string {
-	if header == "" {
-		return ""
-	}
-	header = strings.TrimSpace(header)
-	const prefix = "Bearer "
-	if strings.HasPrefix(strings.ToLower(header), strings.ToLower(prefix)) {
-		return strings.TrimSpace(header[len(prefix):])
-	}
-	return header
 }
 
 func hasIntersection(userRoles, required []string) bool {
@@ -136,24 +83,16 @@ func hasIntersection(userRoles, required []string) bool {
 	return false
 }
 
-func unauthorized(c *fiber.Ctx, message string) error {
-	return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{
-		Ok:     false,
-		Status: fiber.StatusUnauthorized,
-		Error:  message,
-	})
-}
-
-func forbidden(c *fiber.Ctx, message string) error {
-	return c.Status(fiber.StatusForbidden).JSON(errorResponse{
-		Ok:     false,
-		Status: fiber.StatusForbidden,
-		Error:  message,
-	})
-}
-
-type errorResponse struct {
-	Ok     bool   `json:"ok"`
-	Status int    `json:"status"`
-	Error  string `json:"error"`
+func ClaimsFromContext(c *fiber.Ctx) (*security.ClaimsPayload, bool) {
+	val := c.Locals(DefaultClaimsContextKey)
+	if val == nil {
+		return nil, false
+	}
+	if claims, ok := val.(*security.ClaimsPayload); ok {
+		return claims, true
+	}
+	if claims, ok := val.(security.ClaimsPayload); ok {
+		return &claims, true
+	}
+	return nil, false
 }

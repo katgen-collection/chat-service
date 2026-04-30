@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,16 +9,15 @@ import (
 	"gorm.io/gorm"
 
 	"mikhailjbs/chat-service/internal/domain/contacts"
-	"mikhailjbs/chat-service/internal/infra/httpclient"
+	"mikhailjbs/chat-service/internal/domain/user"
 )
 
 type userRepository struct {
-	db         *gorm.DB
-	userClient *httpclient.Client
+	db *gorm.DB
 }
 
-func NewContactsRepository(db *gorm.DB, userClient *httpclient.Client) contacts.Repository {
-	return &userRepository{db: db, userClient: userClient}
+func NewContactsRepository(db *gorm.DB) contacts.Repository {
+	return &userRepository{db: db}
 }
 
 func (r *userRepository) CreateContact(contact *contacts.Contact) (*contacts.Contact, error) {
@@ -194,16 +192,11 @@ func (r *userRepository) ListContactRequests(params *contacts.ContactRequestQuer
 }
 
 func (r *userRepository) AcceptContactRequest(request *contacts.ContactRequest, bearerToken string) (*contacts.ContactRequest, error) {
-	if r.userClient == nil {
-		return nil, errors.New("user auth client is not configured")
-	}
-
-	ctx := context.Background()
-	senderUser, err := r.FetchUser(ctx, request.SenderID, bearerToken)
+	senderUser, err := r.FetchUser(request.SenderID)
 	if err != nil {
 		return nil, err
 	}
-	receiverUser, err := r.FetchUser(ctx, request.ReceiverID, bearerToken)
+	receiverUser, err := r.FetchUser(request.ReceiverID)
 	if err != nil {
 		return nil, err
 	}
@@ -241,21 +234,18 @@ func (r *userRepository) AcceptContactRequest(request *contacts.ContactRequest, 
 	return request, nil
 }
 
-func (r *userRepository) FetchUser(ctx context.Context, userID string, bearerToken string) (*httpclient.User, error) {
+func (r *userRepository) FetchUser(userID string) (*user.UserSnapshot, error) {
 	if userID == "" {
 		return nil, errors.New("user id is required")
 	}
-	resp, err := r.userClient.GetUserByID(ctx, userID, bearerToken)
-	if err != nil {
-		return nil, fmt.Errorf("fetch user %s: %w", userID, err)
+	var snap user.UserSnapshot
+	if err := r.db.First(&snap, "id = ?", userID).Error; err != nil {
+		return nil, fmt.Errorf("user snapshot %s not found: %w", userID, err)
 	}
-	if resp == nil || resp.User == nil {
-		return nil, fmt.Errorf("user %s not found", userID)
-	}
-	return resp.User, nil
+	return &snap, nil
 }
 
-func buildContact(ownerID string, peer *httpclient.User) (*contacts.Contact, error) {
+func buildContact(ownerID string, peer *user.UserSnapshot) (*contacts.Contact, error) {
 	if ownerID == "" {
 		return nil, errors.New("contact owner id is required")
 	}
@@ -266,8 +256,8 @@ func buildContact(ownerID string, peer *httpclient.User) (*contacts.Contact, err
 		return nil, errors.New("peer user id is missing")
 	}
 	name := peer.Username
-	if peer.FullName != "" {
-		name = peer.FullName
+	if peer.Fullname != "" {
+		name = peer.Fullname
 	}
 	if name == "" {
 		name = peer.Email

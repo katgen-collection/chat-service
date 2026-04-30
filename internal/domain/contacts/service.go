@@ -1,13 +1,12 @@
 package contacts
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"mikhailjbs/chat-service/internal/infra/httpclient"
+	"mikhailjbs/chat-service/internal/domain/user"
 )
 
 var (
@@ -31,7 +30,7 @@ type Repository interface {
 	GetContactRequestByID(id uuid.UUID) (*ContactRequest, error)
 	UpdateContactRequest(request *ContactRequest) (*ContactRequest, error)
 	AcceptContactRequest(request *ContactRequest, bearerToken string) (*ContactRequest, error)
-	FetchUser(ctx context.Context, userID string, bearerToken string) (*httpclient.User, error)
+	FetchUser(userID string) (*user.UserSnapshot, error)
 	DeleteContactRequest(id uuid.UUID) error
 	ListContactRequests(params *ContactRequestQueryParams) ([]*ContactRequest, error)
 }
@@ -105,16 +104,14 @@ func (s *service) ListContacts(params *ContactQueryParams) ([]*Contact, error) {
 }
 
 func (s *service) CreateContactRequest(request *CreateContactRequest, bearerToken string) (*ContactRequest, error) {
-	ctx := context.Background()
-
 	var senderName, receiverName string
 
 	// Fetch sender explicitly for resolving name (if available)
-	senderUser, err := s.repo.FetchUser(ctx, request.SenderID, bearerToken)
+	senderUser, err := s.repo.FetchUser(request.SenderID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch sender info: %w", err)
 	}
-	senderName = senderUser.FullName
+	senderName = senderUser.Fullname
 	if senderName == "" {
 		senderName = senderUser.Username
 	}
@@ -123,11 +120,11 @@ func (s *service) CreateContactRequest(request *CreateContactRequest, bearerToke
 	}
 
 	// Fetch receiver explicitly for resolving name
-	receiverUser, err := s.repo.FetchUser(ctx, request.ReceiverID, bearerToken)
+	receiverUser, err := s.repo.FetchUser(request.ReceiverID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch receiver info: %w", err)
 	}
-	receiverName = receiverUser.FullName
+	receiverName = receiverUser.Fullname
 	if receiverName == "" {
 		receiverName = receiverUser.Username
 	}

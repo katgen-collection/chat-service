@@ -15,13 +15,13 @@ import (
 	"mikhailjbs/chat-service/internal/config"
 	"mikhailjbs/chat-service/internal/domain/contacts"
 	"mikhailjbs/chat-service/internal/domain/message"
+	"mikhailjbs/chat-service/internal/domain/user"
 	"mikhailjbs/chat-service/internal/infra/http"
 	"mikhailjbs/chat-service/internal/infra/http/handlers"
-	"mikhailjbs/chat-service/internal/infra/httpclient"
 	"mikhailjbs/chat-service/internal/infra/logger"
 	"mikhailjbs/chat-service/internal/infra/middleware"
 	"mikhailjbs/chat-service/internal/infra/repository"
-	"mikhailjbs/chat-service/internal/infra/security"
+	"mikhailjbs/chat-service/internal/infra/event"
 	ws "mikhailjbs/chat-service/internal/infra/websocket"
 
 	contactsUseCase "mikhailjbs/chat-service/internal/usecase/contacts"
@@ -33,7 +33,7 @@ func Run() {
 
 	// 2. Init Logger
 	logger.Init()
-	logger.Log.Info("Starting User Auth Service...")
+	logger.Log.Info("Starting Chat Service...")
 
 	// 3. Init Database
 	dsn := fmt.Sprintf(
@@ -79,22 +79,16 @@ func Run() {
 	}
 
 	// Auto Migrate (for development simplicity, usually done via migration tools)
-	if err := db.AutoMigrate(&contacts.Contact{}, &contacts.ContactRequest{}); err != nil {
+	if err := db.AutoMigrate(&contacts.Contact{}, &contacts.ContactRequest{}, &user.UserSnapshot{}); err != nil {
 		logger.Log.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	// Drop previous unique index on email to fix duplicate constraint issue
+	// Remove index on email
 	db.Exec("DROP INDEX IF EXISTS chat_service.idx_chat_service_contacts_email")
 	db.Exec("ALTER TABLE chat_service.contacts DROP CONSTRAINT IF EXISTS idx_chat_service_contacts_email")
 
-	userAuthClient, err := httpclient.New(cfg.UserAuthServiceURL, nil)
-	if err != nil {
-		logger.Log.Fatalf("Failed to initialize user auth http client: %v", err)
-	}
-
 	// 4. Init Repository
-	// userRepo := repository.NewUserRepository(db)
-	contactsRepo := repository.NewContactsRepository(db, userAuthClient)
+	contactsRepo := repository.NewContactsRepository(db)
 	messageRepo := repository.NewMessageRepository(mongoClient, cfg.MongoDatabase)
 
 	// 5. Init Service (Domain)
@@ -123,35 +117,31 @@ func Run() {
 		deleteContactUC,
 	)
 
+	wsHub := ws.NewHub(contactsService, messageService, logger.Log)
+
 	contactRequestHandler := handlers.NewContactRequestHandler(
 		createContactRequestUC,
 		getContactRequestUC,
 		getContactRequestsUC,
 		updateContactRequestUC,
 		deleteContactRequestUC,
+		wsHub,
 	)
 
 	// Message HTTP handler (history pagination)
 	messageHandler := handlers.NewMessageHandler(messageService)
 
-	wsHub := ws.NewHub(contactsService, messageService, logger.Log)
 	websocketHandler := handlers.NewWebsocketHandler(wsHub)
 
 	// 8. Init Server
 	app := http.NewServer(cfg.CorsAllowedOrigins)
 
-	// Init JWT Manager
-	accessTTL := time.Duration(cfg.AccessTokenMinutes) * time.Minute
-	refreshTTL := time.Duration(cfg.RefreshTokenDays) * 24 * time.Hour
-	tokenManager, err := security.NewTokenManager(cfg.JWTSecret, cfg.JWTRefreshSecret, accessTTL, refreshTTL, logger.Log)
-	if err != nil {
-		logger.Log.Fatalf("Failed to initialize token manager: %v", err)
-	}
+	// Start Redis Subscriber for User Snapshots
+	event.StartRedisSubscriber(context.Background(), cfg.RedisURL, db)
+
+	// Init Auth Middleware (Trusts API Gateway Headers)
 	authzMiddleware := middleware.NewAuthMiddleware(middleware.Config{
-		TokenManager:      tokenManager,
-		AccessTokenCookie: middleware.DefaultAccessTokenCookie,
 		ContextKey:        middleware.DefaultClaimsContextKey,
-		AllowQueryToken:   true,
 	})
 
 	// 9. Register Routes

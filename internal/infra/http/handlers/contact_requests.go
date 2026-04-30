@@ -3,6 +3,7 @@ package handlers
 import (
 	"mikhailjbs/chat-service/internal/domain/contacts"
 	"mikhailjbs/chat-service/internal/infra/middleware"
+	ws "mikhailjbs/chat-service/internal/infra/websocket"
 	usecase "mikhailjbs/chat-service/internal/usecase/contacts"
 
 	"github.com/gofiber/fiber/v2"
@@ -22,6 +23,7 @@ type contactRequestHandler struct {
 	getContactRequestsUseCase   usecase.GetContactRequestsUseCase
 	updateContactRequestUseCase usecase.UpdateContactRequestUseCase
 	deleteContactRequestUseCase usecase.DeleteContactRequestUseCase
+	wsHub                       *ws.Hub
 }
 
 func NewContactRequestHandler(
@@ -30,6 +32,7 @@ func NewContactRequestHandler(
 	getContactRequestsUseCase usecase.GetContactRequestsUseCase,
 	updateContactRequestUseCase usecase.UpdateContactRequestUseCase,
 	deleteContactRequestUseCase usecase.DeleteContactRequestUseCase,
+	wsHub *ws.Hub,
 ) ContactRequestHandler {
 	return &contactRequestHandler{
 		createContactRequestUseCase: createContactRequestUseCase,
@@ -37,6 +40,7 @@ func NewContactRequestHandler(
 		getContactRequestsUseCase:   getContactRequestsUseCase,
 		updateContactRequestUseCase: updateContactRequestUseCase,
 		deleteContactRequestUseCase: deleteContactRequestUseCase,
+		wsHub:                       wsHub,
 	}
 }
 
@@ -80,6 +84,9 @@ func (h *contactRequestHandler) CreateContactRequest(c *fiber.Ctx) error {
 		}
 		return SendError(c, fiber.StatusInternalServerError, err.Error())
 	}
+
+	// Notify the receiver via WebSocket
+	_ = h.wsHub.SendToUser(createdContactRequest.ReceiverID, ws.EventContactRequestIncoming, createdContactRequest)
 
 	return SendSuccess(c, fiber.StatusCreated, "Contact request created successfully", createdContactRequest)
 }
@@ -228,6 +235,18 @@ func (h *contactRequestHandler) UpdateContactRequest(c *fiber.Ctx) error {
 		}
 		return SendError(c, fiber.StatusInternalServerError, err.Error())
 	}
+
+	// Notify the opposite party
+	oppositeUser := updatedContactRequest.SenderID
+	if userId == updatedContactRequest.SenderID {
+		oppositeUser = updatedContactRequest.ReceiverID
+	}
+	_ = h.wsHub.SendToUser(oppositeUser, ws.EventContactRequestUpdated, updatedContactRequest)
+
+	if updatedContactRequest.Status == "accepted" {
+		h.wsHub.NotifyNewContact(updatedContactRequest.SenderID, updatedContactRequest.ReceiverID)
+	}
+
 	return SendSuccess(c, fiber.StatusOK, "Contact request updated successfully", updatedContactRequest)
 }
 
