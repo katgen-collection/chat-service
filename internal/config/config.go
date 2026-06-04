@@ -45,7 +45,7 @@ func Load() *Config {
 		UserAuthServiceURL: getEnv("USER_AUTH_SERVICE_URL", ""),
 		JWTSecret:          getEnv("JWT_SECRET", ""),
 		JWTRefreshSecret:   getEnv("JWT_REFRESH_SECRET", ""),
-		CorsAllowedOrigins: getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3002,http://localhost:8080,https://chat.mikhailjbs.my.id"),
+		CorsAllowedOrigins: getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3002,http://localhost:8080,https://chat.katgen.pro"),
 		AccessTokenMinutes: getEnvAsInt("ACCESS_TOKEN_MINUTES", 15),
 		RefreshTokenDays:   getEnvAsInt("REFRESH_TOKEN_DAYS", 30),
 		RedisURL:           getEnv("REDIS_URL", "redis://localhost:6379"),

@@ -18,7 +18,7 @@ env:
   REMOTE_BIN_PATH: /usr/local/bin/chat-service
   REMOTE_ENV_DIR: /etc/chat-service
   REMOTE_ENV_FILE: /etc/chat-service/service.env
-  HEALTHCHECK_URL: https://api.mikhailjbs.my.id/chat/health
+  HEALTHCHECK_URL: https://api.katgen.pro/chat/health
 
 jobs:
   deploy:
